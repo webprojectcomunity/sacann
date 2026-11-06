@@ -25,7 +25,6 @@
         button.danger { background: #dc3545; }
         button:disabled { background: #cccccc; cursor: not-allowed; }
         #pageCounter { font-weight: bold; color: #007bff; margin: 10px 0; }
-        /* Sembunyikan input file asli, diganti dengan label tombol */
         input[type="file"] { display: none; }
     </style>
 </head>
@@ -35,7 +34,7 @@
         <h2>📱 Web Doc Scanner</h2>
         <p style="font-size: 13px; color: #666;">Ambil foto dokumen, crop, ubah ke B&W, dan jadikan satu PDF!</p>
 
-        <!-- Tombol Pemicu Kamera Bawaan HP via Label -->
+        <!-- Tombol Ambil Gambar -->
         <label for="cameraInput" class="upload-btn">📷 Ambil Foto Dokumen</label>
         <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
@@ -65,7 +64,7 @@
     <script>
         const { jsPDF } = window.jspdf;
         let cropper = null;
-        let scannedPages = []; // Menyimpan data URL gambar per halaman
+        let scannedPages = []; // Menyimpan array objek { dataUrl, width, height }
 
         const cameraInput = document.getElementById('cameraInput');
         const imageToCrop = document.getElementById('imageToCrop');
@@ -76,7 +75,7 @@
         const pageCounter = document.getElementById('pageCounter');
         const filterCanvas = document.getElementById('filterCanvas');
 
-        // 1. Event saat foto berhasil diambil dari kamera HP
+        // 1. Event saat foto diambil dari kamera HP
         cameraInput.addEventListener('change', function(e) {
             const files = e.target.files;
             if (files && files.length > 0) {
@@ -87,7 +86,6 @@
                     cropArea.style.display = 'block';
                     cropBtn.style.display = 'inline-block';
 
-                    // Inisialisasi Cropper.js
                     if (cropper) {
                         cropper.destroy();
                     }
@@ -100,74 +98,68 @@
             }
         });
 
-        // 2. Tombol Proses: Crop + Filter Hitam Putih (B&W) + Simpan ke Array Multi-halaman
+        // 2. Tombol Proses: Crop + Filter Hitam Putih + Simpan Ukuran Asli
         cropBtn.addEventListener('click', function() {
             if (!cropper) return;
 
-            // Ambil hasil crop dalam bentuk canvas
             const croppedCanvas = cropper.getCroppedCanvas({
-                maxWidth: 1200, // Optimasi ukuran agar tidak terlalu besar
+                maxWidth: 1200,
                 maxHeight: 1600
             });
 
-            // Terapkan Filter Hitam Putih (B&W) & Kontras Tinggi via Canvas
+            // Terapkan filter dan dapatkan hasil DataURL serta dimensi ukurannya
             const processedDataUrl = applyBWSkippingFilter(croppedCanvas);
 
-            // Simpan ke array multi-halaman
-            scannedPages.push(processedDataUrl);
+            // Simpan gambar beserta ukuran width & height-nya secara akurat
+            scannedPages.push({
+                dataUrl: processedDataUrl,
+                width: croppedCanvas.width,
+                height: croppedCanvas.height
+            });
 
             // Perbarui UI
             pageCounter.innerText = `Total Halaman Tersimpan: ${scannedPages.length}`;
             downloadPdfBtn.disabled = false;
             resetBtn.style.display = 'inline-block';
 
-            // Bersihkan area crop untuk halaman berikutnya
+            // Reset area crop
             cropArea.style.display = 'none';
             cropBtn.style.display = 'none';
             cropper.destroy();
             cropper = null;
-            
-            // Penting: Reset nilai input file agar kamera bisa dibuka kembali untuk halaman berikutnya
             cameraInput.value = ''; 
         });
 
-        // Fungsi manipulasi piksel canvas untuk efek Hitam Putih tajam ala Scanner
+        // Fungsi Filter Hitam Putih
         function applyBWSkippingFilter(sourceCanvas) {
             const ctx = filterCanvas.getContext('2d');
             filterCanvas.width = sourceCanvas.width;
             filterCanvas.height = sourceCanvas.height;
 
-            // Gambar ulang dari hasil crop
             ctx.drawImage(sourceCanvas, 0, 0);
 
             const imgData = ctx.getImageData(0, 0, filterCanvas.width, filterCanvas.height);
             const data = imgData.data;
 
-            // Algoritma Grayscale & Peningkatan Kontras Threshold
-            const contrast = 1.3; // Faktor peningkatan kontras
+            const contrast = 1.3;
             const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
 
             for (let i = 0; i < data.length; i += 4) {
-                // Ubah ke Grayscale standar
                 let avg = 0.3 * data[i] + 0.59 * data[i+1] + 0.11 * data[i+2];
-                
-                // Terapkan penyesuaian kontras agar latar belakang bersih (putih) dan teks pekat (hitam)
                 let val = factor * (avg - 128) + 128;
                 val = val < 0 ? 0 : (val > 255 ? 255 : val);
-
-                // Filter ambang batas (thresholding sederhana untuk hasil scan bersih)
                 val = val > 180 ? 255 : (val < 80 ? 0 : val); 
 
-                data[i] = val;     // Merah
-                data[i+1] = val;   // Hijau
-                data[i+2] = val;   // Biru
+                data[i] = val;
+                data[i+1] = val;
+                data[i+2] = val;
             }
 
             ctx.putImageData(imgData, 0, 0);
             return filterCanvas.toDataURL('image/jpeg', 0.85);
         }
 
-        // 3. Tombol Download PDF (Menggabungkan semua halaman dengan doc.addPage())
+        // 3. Tombol Download PDF (Menggunakan dimensi yang sudah disimpan, bebas kendala async)
         downloadPdfBtn.addEventListener('click', function() {
             if (scannedPages.length === 0) return;
 
@@ -175,19 +167,15 @@
             const pdfWidth = doc.internal.pageSize.getWidth();
             const pdfHeight = doc.internal.pageSize.getHeight();
 
-            scannedPages.forEach((pageImgData, index) => {
+            scannedPages.forEach((page, index) => {
                 if (index > 0) {
-                    doc.addPage(); // Tambah halaman baru untuk halaman ke-2 dan seterusnya
+                    doc.addPage();
                 }
 
-                // Buat objek gambar untuk menghitung aspek rasio secara proporsional
-                const img = new Image();
-                img.src = pageImgData;
+                // Hitung tinggi proporsional berdasarkan ukuran tersimpan
+                const imgHeight = (page.height * pdfWidth) / page.width;
                 
-                // Menghitung tinggi otomatis agar gambar tidak gepeng di PDF A4
-                const imgHeight = (img.height * pdfWidth) / img.width;
-                
-                doc.addImage(pageImgData, 'JPEG', 0, 10, pdfWidth, Math.min(imgHeight, pdfHeight - 20));
+                doc.addImage(page.dataUrl, 'JPEG', 0, 10, pdfWidth, Math.min(imgHeight, pdfHeight - 20));
             });
 
             doc.save('dokumen-hasil-scan.pdf');
