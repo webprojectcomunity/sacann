@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Web Document Scanner - Uncompressed HD</title>
+    <title>Advanced Web Document Scanner - Optimized HD</title>
     
     <!-- jsPDF Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -122,8 +122,8 @@
 <body>
 
     <div class="card">
-        <h2>📱 Web Doc Scanner (Uncompressed HD)</h2>
-        <p style="font-size: 13px; color: #666;">Scan dokumen kualitas penuh tanpa kompresi, tajam, dan jernih!</p>
+        <h2>📱 Web Doc Scanner (Optimized HD)</h2>
+        <p style="font-size: 13px; color: #666;">Scan dokumen tajam, ukuran file ringan, siap unduh & upload!</p>
 
         <!-- Tombol Ambil Gambar -->
         <label for="cameraInput" class="upload-btn">📷 Ambil Foto Dokumen</label>
@@ -212,14 +212,13 @@
             }
         });
 
-        // 2. Tombol Proses: Crop resolusi penuh + Filter Magic Color Tanpa Kompresi
+        // 2. Tombol Proses: Crop resolusi penuh + Magic Color + Kompresi Halus (90%)
         cropBtn.addEventListener('click', function() {
             if (!cropper) return;
 
-            // Mengambil ukuran asli tanpa batasan maksimal (resolusi penuh kamera)
             const croppedCanvas = cropper.getCroppedCanvas();
 
-            const processedDataUrl = applyUncompressedMagicColor(croppedCanvas);
+            const processedDataUrl = applyOptimizedMagicColor(croppedCanvas);
 
             scannedPages.push({
                 dataUrl: processedDataUrl,
@@ -236,8 +235,8 @@
             cameraInput.value = ''; 
         });
 
-        // Algoritma Magic Color dengan format PNG (Lossless / Tanpa Kompresi sama sekali)
-        function applyUncompressedMagicColor(sourceCanvas) {
+        // Algoritma Magic Color dengan Kompresi Ringan (JPEG kualitas 0.90)
+        function applyOptimizedMagicColor(sourceCanvas) {
             const ctx = filterCanvas.getContext('2d');
             filterCanvas.width = sourceCanvas.width;
             filterCanvas.height = sourceCanvas.height;
@@ -276,8 +275,8 @@
 
             ctx.putImageData(imgData, 0, 0);
             
-            // Menggunakan format PNG agar kualitas gambar 100% utuh tanpa kompresi piksel
-            return filterCanvas.toDataURL('image/png');
+            // Kompresi ringan JPEG pada kualitas 0.90 (90%) agar file tidak terlalu besar tapi tetap sangat tajam
+            return filterCanvas.toDataURL('image/jpeg', 0.90);
         }
 
         // Fungsi memperbarui UI
@@ -318,7 +317,7 @@
             updateUI();
         }
 
-        // Helper untuk menghasilkan objek jsPDF dengan format PNG uncompressed
+        // Helper untuk menghasilkan objek jsPDF
         function generatePDF() {
             const doc = new jsPDF();
             const pdfWidth = doc.internal.pageSize.getWidth();
@@ -329,7 +328,7 @@
                     doc.addPage();
                 }
                 const imgHeight = (page.height * pdfWidth) / page.width;
-                doc.addImage(page.dataUrl, 'PNG', 0, 10, pdfWidth, Math.min(imgHeight, pdfHeight - 20));
+                doc.addImage(page.dataUrl, 'JPEG', 0, 10, pdfWidth, Math.min(imgHeight, pdfHeight - 20));
             });
             return doc;
         }
