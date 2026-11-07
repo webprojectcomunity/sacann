@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Web Document Scanner - Magic Color</title>
+    <title>Advanced Web Document Scanner - Google Drive Upload</title>
     
     <!-- jsPDF Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,17 +22,108 @@
         button:hover, label.upload-btn:hover { background: #0056b3; }
         button.success { background: #28a745; }
         button.success:hover { background: #218838; }
+        button.warning { background: #ffc107; color: #333; }
+        button.warning:hover { background: #e0a800; }
         button.danger { background: #dc3545; }
         button:disabled { background: #cccccc; cursor: not-allowed; }
         #pageCounter { font-weight: bold; color: #007bff; margin: 10px 0; }
         input[type="file"] { display: none; }
+
+        /* Form Input Nama File */
+        .filename-group {
+            margin: 15px 0 5px 0;
+            text-align: left;
+        }
+        .filename-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+        }
+        .filename-input-wrapper {
+            display: flex;
+            align-items: center;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .filename-input-wrapper input {
+            flex: 1;
+            border: none;
+            padding: 10px 12px;
+            font-size: 14px;
+            outline: none;
+            color: #333;
+        }
+        .filename-input-wrapper .ext-label {
+            background: #e9ecef;
+            color: #495057;
+            padding: 10px 12px;
+            font-size: 14px;
+            font-weight: 600;
+            border-left: 1px solid #ccc;
+        }
+
+        /* Galeri Pratinjau Thumbnail */
+        .thumbnail-scroll {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 10px 0;
+            margin-top: 15px;
+            scroll-behavior: smooth;
+        }
+        .thumbnail-card {
+            position: relative;
+            flex: 0 0 80px;
+            height: 100px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #fafafa;
+        }
+        .thumbnail-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .thumbnail-card .delete-thumb {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .thumbnail-card span {
+            position: absolute;
+            bottom: 2px;
+            left: 2px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            font-size: 9px;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        #uploadStatus { margin-top: 10px; font-size: 13px; font-weight: 600; }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <h2>📱 Web Doc Scanner (Magic Color)</h2>
-        <p style="font-size: 13px; color: #666;">Ambil foto, crop, bersihkan bayangan & pertajam warna dokumen!</p>
+        <h2>📱 Web Doc Scanner</h2>
+        <p style="font-size: 13px; color: #666;">Scan, crop, pratinjau, unduh, atau upload langsung ke Google Drive!</p>
 
         <!-- Tombol Ambil Gambar -->
         <label for="cameraInput" class="upload-btn">📷 Ambil Foto Dokumen</label>
@@ -49,30 +140,53 @@
 
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
 
-        <!-- Status Halaman & Download -->
+        <!-- Status Halaman -->
         <div id="pageCounter">Total Halaman Tersimpan: 0</div>
+
+        <!-- Galeri Pratinjau Thumbnail -->
+        <div class="thumbnail-scroll" id="thumbnailContainer" style="display: none;"></div>
         
-        <div class="btn-group">
+        <!-- Form Input Nama File Custom -->
+        <div class="filename-group" id="filenameGroup" style="display: none;">
+            <label for="filenameInput">📝 Nama File PDF:</label>
+            <div class="filename-input-wrapper">
+                <input type="text" id="filenameInput" placeholder="Contoh: model C Hasil Presiden 2024" value="model C Hasil Presiden 2024_Tebing_Kapling_ TPS 1">
+                <span class="ext-label">.pdf</span>
+            </div>
+        </div>
+
+        <div id="uploadStatus"></div>
+
+        <div class="btn-group" style="margin-top: 15px;">
             <button id="downloadPdfBtn" class="success" disabled>📥 Download PDF</button>
+            <button id="uploadDriveBtn" class="warning" disabled>☁️ Upload ke Drive</button>
             <button id="resetBtn" class="danger" style="display:none;">Reset Semua</button>
         </div>
     </div>
 
-    <!-- Hidden Canvas untuk Proses Filter Magic Color -->
+    <!-- Hidden Canvas untuk Proses Filter -->
     <canvas id="filterCanvas" style="display:none;"></canvas>
 
     <script>
         const { jsPDF } = window.jspdf;
         let cropper = null;
-        let scannedPages = []; // Menyimpan array objek { dataUrl, width, height }
+        let scannedPages = [];
+
+        // URL Web App Google Apps Script Anda yang sudah dimasukkan
+        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbx_nahWxHi7fRXESZ5SpDt1LHzuAnJzQdEuSGiQgruDUHwIb5tKkCUt1DpUdj8LSX4/exec'; 
 
         const cameraInput = document.getElementById('cameraInput');
         const imageToCrop = document.getElementById('imageToCrop');
         const cropArea = document.getElementById('cropArea');
         const cropBtn = document.getElementById('cropBtn');
         const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+        const uploadDriveBtn = document.getElementById('uploadDriveBtn');
         const resetBtn = document.getElementById('resetBtn');
         const pageCounter = document.getElementById('pageCounter');
+        const thumbnailContainer = document.getElementById('thumbnailContainer');
+        const filenameGroup = document.getElementById('filenameGroup');
+        const filenameInput = document.getElementById('filenameInput');
+        const uploadStatus = document.getElementById('uploadStatus');
         const filterCanvas = document.getElementById('filterCanvas');
 
         // 1. Event saat foto diambil dari kamera HP
@@ -98,7 +212,7 @@
             }
         });
 
-        // 2. Tombol Proses: Crop + Filter Magic Color (Tetap Berwarna & Pertajam Kontras)
+        // 2. Tombol Proses: Crop + Filter Stabil + Simpan
         cropBtn.addEventListener('click', function() {
             if (!cropper) return;
 
@@ -107,8 +221,7 @@
                 maxHeight: 1600
             });
 
-            // Terapkan Filter Magic Color
-            const processedDataUrl = applyMagicColorFilter(croppedCanvas);
+            const processedDataUrl = applyBalancedFilter(croppedCanvas);
 
             scannedPages.push({
                 dataUrl: processedDataUrl,
@@ -116,9 +229,7 @@
                 height: croppedCanvas.height
             });
 
-            pageCounter.innerText = `Total Halaman Tersimpan: ${scannedPages.length}`;
-            downloadPdfBtn.disabled = false;
-            resetBtn.style.display = 'inline-block';
+            updateUI();
 
             cropArea.style.display = 'none';
             cropBtn.style.display = 'none';
@@ -127,8 +238,8 @@
             cameraInput.value = ''; 
         });
 
-        // Fungsi Filter Magic Color (Mempertahankan Warna Asli, Menghilangkan Bayangan & Mempertajam Teks)
-        function applyMagicColorFilter(sourceCanvas) {
+        // Fungsi Filter Penyesuaian Cahaya & Kontras Seimbang
+        function applyBalancedFilter(sourceCanvas) {
             const ctx = filterCanvas.getContext('2d');
             filterCanvas.width = sourceCanvas.width;
             filterCanvas.height = sourceCanvas.height;
@@ -138,54 +249,67 @@
             const imgData = ctx.getImageData(0, 0, filterCanvas.width, filterCanvas.height);
             const data = imgData.data;
 
-            // Hitung rata-rata kecerahan gambar untuk estimasi pencahayaan latar belakang
-            let totalLuma = 0;
-            for (let i = 0; i < data.length; i += 4) {
-                totalLuma += 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-            }
-            let avgLuma = totalLuma / (data.length / 4);
-            let brightThreshold = Math.max(140, avgLuma * 1.15);
-
-            // Faktor Kontras & Penajaman Warna
-            const contrast = 1.35; // Menaikkan ketajaman teks/warna
+            const brightness = 35; 
+            const contrast = 1.25;  
 
             for (let i = 0; i < data.length; i += 4) {
                 let r = data[i];
                 let g = data[i+1];
                 let b = data[i+2];
 
-                let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                r = (r - 128) * contrast + 128 + brightness;
+                g = (g - 128) * contrast + 128 + brightness;
+                b = (b - 128) * contrast + 128 + brightness;
 
-                if (luma > brightThreshold) {
-                    // Jika ini adalah area latar belakang / kertas (bahkan yang agak kusam/terkena bayangan tipis),
-                    // bersihkan dan putihkan secara bertahap sambil menjaga transisi halus
-                    let whitenFactor = (luma - brightThreshold) / (255 - brightThreshold + 1);
-                    whitenFactor = Math.min(1, Math.max(0, whitenFactor));
-                    
-                    r = r + (255 - r) * (0.6 + whitenFactor * 0.4);
-                    g = g + (255 - g) * (0.6 + whitenFactor * 0.4);
-                    b = b + (255 - b) * (0.6 + whitenFactor * 0.4);
-                } else {
-                    // Jika ini adalah area teks atau gambar berwarna, tingkatkan kontrasnya 
-                    // tanpa merusak komponen warna RGB (stempel merah/biru tetap berwarna)
-                    r = Math.min(255, Math.max(0, (r - 128) * contrast + 128 - 10));
-                    g = Math.min(255, Math.max(0, (g - 128) * contrast + 128 - 10));
-                    b = Math.min(255, Math.max(0, (b - 128) * contrast + 128 - 10));
-                }
-
-                data[i]   = r;
-                data[i+1] = g;
-                data[i+2] = b;
+                data[i]   = Math.min(255, Math.max(0, r));
+                data[i+1] = Math.min(255, Math.max(0, g));
+                data[i+2] = Math.min(255, Math.max(0, b));
             }
 
             ctx.putImageData(imgData, 0, 0);
             return filterCanvas.toDataURL('image/jpeg', 0.90);
         }
 
-        // 3. Tombol Download PDF
-        downloadPdfBtn.addEventListener('click', function() {
-            if (scannedPages.length === 0) return;
+        // Fungsi memperbarui UI
+        function updateUI() {
+            pageCounter.innerText = `Total Halaman Tersimpan: ${scannedPages.length}`;
+            
+            if (scannedPages.length > 0) {
+                downloadPdfBtn.disabled = false;
+                uploadDriveBtn.disabled = false;
+                resetBtn.style.display = 'inline-block';
+                thumbnailContainer.style.display = 'flex';
+                filenameGroup.style.display = 'block';
+            } else {
+                downloadPdfBtn.disabled = true;
+                uploadDriveBtn.disabled = true;
+                resetBtn.style.display = 'none';
+                thumbnailContainer.style.display = 'none';
+                filenameGroup.style.display = 'none';
+                uploadStatus.innerHTML = '';
+            }
 
+            thumbnailContainer.innerHTML = '';
+            scannedPages.forEach((page, index) => {
+                const thumbCard = document.createElement('div');
+                thumbCard.className = 'thumbnail-card';
+                
+                thumbCard.innerHTML = `
+                    <img src="${page.dataUrl}" alt="Hal ${index + 1}">
+                    <span>#${index + 1}</span>
+                    <button class="delete-thumb" onclick="deletePage(${index})" title="Hapus Halaman">✕</button>
+                `;
+                thumbnailContainer.appendChild(thumbCard);
+            });
+        }
+
+        window.deletePage = function(index) {
+            scannedPages.splice(index, 1);
+            updateUI();
+        }
+
+        // Helper untuk menghasilkan objek jsPDF
+        function generatePDF() {
             const doc = new jsPDF();
             const pdfWidth = doc.internal.pageSize.getWidth();
             const pdfHeight = doc.internal.pageSize.getHeight();
@@ -194,20 +318,68 @@
                 if (index > 0) {
                     doc.addPage();
                 }
-
                 const imgHeight = (page.height * pdfWidth) / page.width;
                 doc.addImage(page.dataUrl, 'JPEG', 0, 10, pdfWidth, Math.min(imgHeight, pdfHeight - 20));
             });
+            return doc;
+        }
 
-            doc.save('dokumen-magic-color.pdf');
+        // 3. Tombol Download PDF Lokal
+        downloadPdfBtn.addEventListener('click', function() {
+            if (scannedPages.length === 0) return;
+
+            let userFilename = filenameInput.value.trim() || 'dokumen-hasil-scan';
+            userFilename = userFilename.replace(/[/\\?%*:|"<>]/g, '_');
+
+            const doc = generatePDF();
+            doc.save(`${userFilename}.pdf`);
         });
 
-        // 4. Reset Semua Sesi Scan
+        // 4. Tombol Upload ke Google Drive
+        uploadDriveBtn.addEventListener('click', async function() {
+            if (scannedPages.length === 0) return;
+
+            let userFilename = filenameInput.value.trim() || 'dokumen-hasil-scan';
+            userFilename = userFilename.replace(/[/\\?%*:|"<>]/g, '_');
+
+            uploadDriveBtn.disabled = true;
+            uploadDriveBtn.innerText = '⏳ Mengunggah...';
+            uploadStatus.style.color = '#007bff';
+            uploadStatus.innerText = 'Sedang mengirim file ke Google Drive...';
+
+            try {
+                const doc = generatePDF();
+                const pdfDataUri = doc.output('datauristring'); // Ubah PDF menjadi Base64
+
+                const response = await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        filename: `${userFilename}.pdf`,
+                        fileData: pdfDataUri
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    uploadStatus.style.color = '#28a745';
+                    uploadStatus.innerHTML = `✅ Berhasil diunggah! <a href="${result.url}" target="_blank" style="color: #007bff; text-decoration: underline;">Buka di Drive</a>`;
+                } else {
+                    throw new Error(result.message || 'Gagal mengunggah.');
+                }
+            } catch (error) {
+                uploadStatus.style.color = '#dc3545';
+                uploadStatus.innerText = '❌ Gagal upload: ' + error.message;
+            } finally {
+                uploadDriveBtn.disabled = false;
+                uploadDriveBtn.innerText = '☁️ Upload ke Drive';
+            }
+        });
+
+        // 5. Reset Semua Sesi Scan
         resetBtn.addEventListener('click', function() {
             scannedPages = [];
-            pageCounter.innerText = `Total Halaman Tersimpan: 0`;
-            downloadPdfBtn.disabled = true;
-            resetBtn.style.display = 'none';
+            updateUI();
             cropArea.style.display = 'none';
             cropBtn.style.display = 'none';
             cameraInput.value = '';
