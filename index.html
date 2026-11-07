@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Web Document Scanner - Optimized HD</title>
+    <title>Advanced Web Document Scanner - Rotation & HD</title>
     
     <!-- jsPDF Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -24,6 +24,8 @@
         button.success:hover { background: #218838; }
         button.warning { background: #ffc107; color: #333; }
         button.warning:hover { background: #e0a800; }
+        button.secondary { background: #6c757d; }
+        button.secondary:hover { background: #5a6268; }
         button.danger { background: #dc3545; }
         button:disabled { background: #cccccc; cursor: not-allowed; }
         #pageCounter { font-weight: bold; color: #007bff; margin: 10px 0; }
@@ -122,8 +124,8 @@
 <body>
 
     <div class="card">
-        <h2>📱 Web Doc Scanner (Optimized HD)</h2>
-        <p style="font-size: 13px; color: #666;">Scan dokumen tajam, ukuran file ringan, siap unduh & upload!</p>
+        <h2>📱 Web Doc Scanner (Rotation & HD)</h2>
+        <p style="font-size: 13px; color: #666;">Scan, rotasi, crop, dan kelola dokumen dengan mudah!</p>
 
         <!-- Tombol Ambil Gambar -->
         <label for="cameraInput" class="upload-btn">📷 Ambil Foto Dokumen</label>
@@ -134,8 +136,11 @@
             <img id="imageToCrop" alt="Source">
         </div>
 
-        <div class="btn-group">
-            <button id="cropBtn" style="display:none;" class="success">✨ Proses & Tambah Halaman</button>
+        <!-- Tombol Kontrol: Rotasi & Proses -->
+        <div class="btn-group" id="cropperControlGroup" style="display:none;">
+            <button type="button" id="rotateLeftBtn" class="secondary">🔄 Putar Kiri</button>
+            <button type="button" id="rotateRightBtn" class="secondary">🔄 Putar Kanan</button>
+            <button type="button" id="cropBtn" class="success">✨ Proses & Tambah</button>
         </div>
 
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
@@ -178,6 +183,9 @@
         const cameraInput = document.getElementById('cameraInput');
         const imageToCrop = document.getElementById('imageToCrop');
         const cropArea = document.getElementById('cropArea');
+        const cropperControlGroup = document.getElementById('cropperControlGroup');
+        const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+        const rotateRightBtn = document.getElementById('rotateRightBtn');
         const cropBtn = document.getElementById('cropBtn');
         const downloadPdfBtn = document.getElementById('downloadPdfBtn');
         const uploadDriveBtn = document.getElementById('uploadDriveBtn');
@@ -198,7 +206,7 @@
                 reader.onload = function(event) {
                     imageToCrop.src = event.target.result;
                     cropArea.style.display = 'block';
-                    cropBtn.style.display = 'inline-block';
+                    cropperControlGroup.style.display = 'flex';
 
                     if (cropper) {
                         cropper.destroy();
@@ -212,12 +220,25 @@
             }
         });
 
-        // 2. Tombol Proses: Crop resolusi penuh + Magic Color + Kompresi Halus (90%)
+        // Tombol Putar Kiri (-90 derajat)
+        rotateLeftBtn.addEventListener('click', function() {
+            if (cropper) {
+                cropper.rotate(-90);
+            }
+        });
+
+        // Tombol Putar Kanan (+90 derajat)
+        rotateRightBtn.addEventListener('click', function() {
+            if (cropper) {
+                cropper.rotate(90);
+            }
+        });
+
+        // 2. Tombol Proses: Crop + Filter Magic Color Optimal + Kompresi Halus (90%)
         cropBtn.addEventListener('click', function() {
             if (!cropper) return;
 
             const croppedCanvas = cropper.getCroppedCanvas();
-
             const processedDataUrl = applyOptimizedMagicColor(croppedCanvas);
 
             scannedPages.push({
@@ -229,13 +250,13 @@
             updateUI();
 
             cropArea.style.display = 'none';
-            cropBtn.style.display = 'none';
+            cropperControlGroup.style.display = 'none';
             cropper.destroy();
             cropper = null;
             cameraInput.value = ''; 
         });
 
-        // Algoritma Magic Color dengan Kompresi Ringan (JPEG kualitas 0.90)
+        // Algoritma Magic Color (Mempertahankan Warna, Memutihkan Latar, Mempertajam Teks)
         function applyOptimizedMagicColor(sourceCanvas) {
             const ctx = filterCanvas.getContext('2d');
             filterCanvas.width = sourceCanvas.width;
@@ -274,9 +295,7 @@
             }
 
             ctx.putImageData(imgData, 0, 0);
-            
-            // Kompresi ringan JPEG pada kualitas 0.90 (90%) agar file tidak terlalu besar tapi tetap sangat tajam
-            return filterCanvas.toDataURL('image/jpeg', 0.90);
+            return filterCanvas.toDataURL('image/jpeg', 0.90); // Kualitas seimbang, anti pecah
         }
 
         // Fungsi memperbarui UI
@@ -358,7 +377,7 @@
 
             try {
                 const doc = generatePDF();
-                const pdfDataUri = doc.output('datauristring'); // Format Base64 PDF
+                const pdfDataUri = doc.output('datauristring');
 
                 const response = await fetch(WEB_APP_URL, {
                     method: 'POST',
@@ -390,7 +409,7 @@
             scannedPages = [];
             updateUI();
             cropArea.style.display = 'none';
-            cropBtn.style.display = 'none';
+            cropperControlGroup.style.display = 'none';
             cameraInput.value = '';
             if (cropper) {
                 cropper.destroy();
